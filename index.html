@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101a32">
+  <title>Data Islands — Landscape Explorer</title>
+  <style>
+    :root { color-scheme: dark; --ink:#edf3ff; --muted:#aab8d5; --line:#7182a955; --panel:#111a2ddd; }
+    * { box-sizing:border-box }
+    body { margin:0; min-height:100vh; display:grid; place-items:center; padding:24px; color:var(--ink); background:#090e1d; font-family:Inter,ui-sans-serif,system-ui,sans-serif }
+    button { font:inherit; color:inherit }
+    .frame { position:relative; width:min(1120px,100%); height:min(760px,90vh); min-height:600px; overflow:hidden; border:1px solid #526080; border-radius:24px; background:#101a32; box-shadow:0 30px 100px #0009 }
+    canvas { position:absolute; inset:0; width:100%; height:100%; cursor:grab; touch-action:none; outline:none }
+    canvas:active { cursor:grabbing }
+    canvas:focus-visible { outline:3px solid #dce8ff; outline-offset:-5px }
+    header { position:absolute; z-index:2; top:26px; left:30px; pointer-events:none }
+    .eyebrow { color:#8ea5d9; font-size:11px; font-weight:700; letter-spacing:.2em; text-transform:uppercase }
+    h1 { margin:8px 0 6px; font-size:clamp(26px,4vw,42px); letter-spacing:-.04em }
+    header p { margin:0; color:var(--muted); font-size:14px }
+    .toolbar { position:absolute; z-index:3; top:30px; right:28px; display:flex; gap:8px }
+    .control { width:40px; height:40px; border:1px solid var(--line); border-radius:12px; background:#111a2ddd; cursor:pointer }
+    .control:hover,.control:focus-visible { background:#273657; outline:2px solid #a9c7ff }
+    .island-nav { position:absolute; z-index:3; top:115px; left:28px; display:grid; gap:7px }
+    .island-nav button { padding:8px 12px; text-align:left; border:1px solid transparent; border-radius:10px; color:#c7d2eb; background:#111a2d9c; cursor:pointer; font-size:12px }
+    .island-nav button:hover,.island-nav button:focus-visible,.island-nav button[aria-pressed="true"] { border-color:var(--line); color:white; background:#293858; outline:none }
+    .hint { position:absolute; z-index:2; bottom:22px; left:28px; color:#9eaccb; font-size:12px; pointer-events:none }
+    .card { position:absolute; z-index:4; right:22px; bottom:22px; width:min(330px,calc(100% - 44px)); max-height:62%; overflow:auto; padding:18px; border:1px solid var(--line); border-radius:16px; background:var(--panel); backdrop-filter:blur(12px); opacity:0; transform:translateY(10px); transition:.2s ease; pointer-events:none }
+    .card.visible { opacity:1; transform:translateY(0); pointer-events:auto }
+    .card-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px }
+    .card small { color:#9cadd2; font-size:10px; font-weight:700; letter-spacing:.16em; text-transform:uppercase }
+    .card h2 { margin:7px 0; font-size:23px }
+    .card p { margin:8px 0; color:#b7c3dc; font-size:13px; line-height:1.55 }
+    .close { border:0; background:transparent; color:#b7c3dc; cursor:pointer; font-size:20px; line-height:1 }
+    .metrics { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin:12px 0 }
+    .metric { padding:10px; border:1px solid #7182a933; border-radius:11px; background:#18233b99 }
+    .metric strong { display:block; font-size:18px }
+    .metric span { color:#9eaccb; font-size:10px }
+    .chart-title { margin:14px 0 4px; color:#9eaccb; font-size:10px; font-weight:700; letter-spacing:.13em; text-transform:uppercase }
+    .chart { display:flex; align-items:end; gap:8px; height:70px; padding:8px 2px 0; border-bottom:1px solid #7182a955 }
+    .chart span { flex:1; min-height:8px; border-radius:5px 5px 0 0; background:linear-gradient(#a9c7ff,#5b7cba); position:relative }
+    .chart span::after { content:attr(data-year); position:absolute; top:calc(100% + 4px); left:50%; transform:translateX(-50%); color:#8d9dbc; font-size:9px }
+    .source { padding-top:12px; color:#8798ba!important; font-size:10px!important; border-top:1px solid #7182a933 }
+    .live { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0,0,0,0) }
+    @media (max-width:650px) { body { padding:0 } .frame { width:100%; height:100vh; min-height:620px; border-radius:0 } header { top:20px; left:20px } .toolbar { top:22px; right:16px } .island-nav { top:115px; left:16px; grid-template-columns:repeat(2,auto); gap:5px } .hint { left:18px; bottom:16px; max-width:45%; line-height:1.5 } .card { right:12px; bottom:48px; width:min(320px,calc(100% - 24px)); max-height:53% } }
+    @media (prefers-reduced-motion:reduce) { *,*::before,*::after { scroll-behavior:auto!important; transition:none!important } }
+  </style>
+</head>
+<body>
+<main class="frame" aria-label="Interactive data landscape">
+  <header><div class="eyebrow">Explore the landscape</div><h1>Data Islands</h1><p>Each island tells a different story.</p></header>
+  <div class="toolbar" aria-label="Landscape controls">
+    <button class="control" id="rotateLeft" aria-label="Rotate left" title="Rotate left (Left arrow)">↶</button>
+    <button class="control" id="rotateRight" aria-label="Rotate right" title="Rotate right (Right arrow)">↷</button>
+    <button class="control" id="zoomIn" aria-label="Zoom in" title="Zoom in (+)">＋</button>
+    <button class="control" id="zoomOut" aria-label="Zoom out" title="Zoom out (-)">−</button>
+  </div>
+  <nav class="island-nav" aria-label="Choose an island" id="islandNav"></nav>
+  <canvas id="scene" tabindex="0" aria-label="3D landscape. Use arrow keys to rotate, plus and minus to zoom, and Tab to choose an island."></canvas>
+  <div class="hint">Drag to rotate · Scroll to zoom · Click or choose an island<br>Keyboard: ← → rotate · + − zoom · 1–5 select · Esc close</div>
+  <aside class="card" id="card" aria-live="polite" aria-hidden="true">
+    <div class="card-head"><div><small id="category"></small><h2 id="title"></h2></div><button class="close" id="closeCard" aria-label="Close details">×</button></div>
+    <p id="description"></p>
+    <div class="metrics" id="metrics"></div>
+    <div class="chart-title" id="chartTitle"></div><div class="chart" id="chart" role="img"></div>
+    <p class="source" id="source"></p>
+  </aside>
+  <div class="live" id="announce" aria-live="polite"></div>
+</main>
+<script type="module">
+  import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js";
+  const canvas=document.querySelector('#scene'), frame=document.querySelector('.frame'), card=document.querySelector('#card');
+  const titleEl=document.querySelector('#title'), categoryEl=document.querySelector('#category'), descriptionEl=document.querySelector('#description');
+  const metricsEl=document.querySelector('#metrics'), chartEl=document.querySelector('#chart'), chartTitleEl=document.querySelector('#chartTitle'), sourceEl=document.querySelector('#source'), announce=document.querySelector('#announce');
+  const islands=[
+    {name:'Climate',category:'Environment',color:'#70d6b0',position:[-4.3,0,-1.2],height:2.7,text:'Global temperature measurements show a clear long-term warming trend. Explore the annual anomaly series and compare the latest years with the historical baseline.',metrics:[['+1.18°C','2023 anomaly'],['1850–2023','record span']],chartTitle:'Temperature anomaly · °C',values:[18,21,25,33,38,46],years:['80s','90s','00s','10s','20','23'],source:'Illustrative sample values. Replace with verified NOAA or NASA data before publishing.'},
+    {name:'Cities',category:'People & places',color:'#ffbc70',position:[0,0,-2.2],height:3.5,text:'Urban populations and built environments are changing rapidly. This island can compare city population, density, or access to public services over time.',metrics:[['56%','people in cities'],['2050','projection horizon']],chartTitle:'Urban population · index',values:[24,30,36,43,50,58],years:['80s','90s','00s','10s','20','30'],source:'Illustrative sample values. Add a named dataset and publication date for real figures.'},
+    {name:'Oceans',category:'Nature',color:'#71b9ff',position:[4.2,0,-0.4],height:2.3,text:'Ocean measurements reveal changes in heat content, sea level, and marine habitats. Use the timeline to surface trends and regional differences.',metrics:[['+0.6°C','surface warming*'],['1993–now','satellite era']],chartTitle:'Ocean heat index',values:[17,20,22,27,34,42],years:['90s','00s','10s','15','20','now'],source:'*Example indicator only. Replace with a sourced regional series (e.g. NOAA or Copernicus).' },
+    {name:'Energy',category:'Infrastructure',color:'#d29aff',position:[-2.1,0,3],height:2.1,text:'Track how the energy mix shifts as communities add renewable generation and improve efficiency. Compare sources, regions, and years.',metrics:[['30%','renewables*'],['2050','net-zero target']],chartTitle:'Renewable share · index',values:[10,14,19,26,35,48],years:['00s','05','10s','15','20','25'],source:'Illustrative sample values. Use a current national grid or IEA dataset and cite it here.'},
+    {name:'Mobility',category:'Transportation',color:'#ff8198',position:[2.5,0,3.2],height:2.8,text:'Routes and travel patterns show how people get around. This space can compare mode share, transit frequency, or commute times across neighborhoods.',metrics:[['42 min','sample commute'],['5 modes','tracked']],chartTitle:'Transit activity · index',values:[22,24,29,31,40,49],years:['18','19','20','21','22','23'],source:'Example values only. Add a local transport authority or survey source before publishing.'}
+  ];
+  const scene=new THREE.Scene(); scene.background=new THREE.Color('#101a32'); scene.fog=new THREE.Fog('#101a32',15,34);
+  const camera=new THREE.PerspectiveCamera(42,1,.1,100); camera.position.set(0,9,16);
+  const renderer=new THREE.WebGLRenderer({canvas,antialias:true}); renderer.setPixelRatio(Math.min(devicePixelRatio,2)); renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap; renderer.outputColorSpace=THREE.SRGBColorSpace;
+  scene.add(new THREE.HemisphereLight('#c8dcff','#35415d',2.2)); const sun=new THREE.DirectionalLight('#fff2d5',3.2); sun.position.set(-5,10,7); sun.castShadow=true; scene.add(sun);
+  const grid=new THREE.GridHelper(24,24,'#415477','#253452'); grid.position.y=-.03; scene.add(grid);
+  const ground=new THREE.Mesh(new THREE.PlaneGeometry(200,200),new THREE.MeshStandardMaterial({color:'#111c34',roughness:1})); ground.rotation.x=-Math.PI/2; ground.position.y=-.08; ground.receiveShadow=true; scene.add(ground);
+  const world=new THREE.Group(); scene.add(world); const clickable=[]; const hitToIsland=new Map();
+  islands.forEach((data,index)=>{
+    const group=new THREE.Group(); group.position.set(...data.position); group.userData.index=index;
+    const base=new THREE.Mesh(new THREE.CylinderGeometry(1.45,1.7,.65,7,1),new THREE.MeshStandardMaterial({color:'#344363',roughness:1,flatShading:true})); base.position.y=.15; base.castShadow=true; base.receiveShadow=true; group.add(base);
+    const hill=new THREE.Mesh(new THREE.ConeGeometry(1.25,data.height,7,2),new THREE.MeshStandardMaterial({color:data.color,roughness:.72,flatShading:true})); hill.position.y=.45+data.height/2; hill.castShadow=true; hill.receiveShadow=true; group.add(hill); clickable.push(hill); hitToIsland.set(hill,index);
+    for(let i=0;i<3;i++){const bar=new THREE.Mesh(new THREE.BoxGeometry(.16,.45+i*.22,.16),new THREE.MeshStandardMaterial({color:'#f4f3ff',roughness:.45}));bar.position.set(-.38+i*.27,data.height+.3+i*.11,.05);bar.castShadow=true;group.add(bar)}
+    const marker=new THREE.Mesh(new THREE.SphereGeometry(.12,16,12),new THREE.MeshBasicMaterial({color:data.color}));marker.position.set(0,data.height+.75,0);group.add(marker); world.add(group);
+  });
+  const positions=[]; for(let i=0;i<180;i++) positions.push((Math.random()-.5)*38,2+Math.random()*12,(Math.random()-.5)*38);
+  const dots=new THREE.BufferGeometry(); dots.setAttribute('position',new THREE.Float32BufferAttribute(positions,3)); scene.add(new THREE.Points(dots,new THREE.PointsMaterial({color:'#8ba4d8',size:.035,transparent:true,opacity:.7})));
+  const nav=document.querySelector('#islandNav'); let selected=-1;
+  function selectIsland(index){selected=(index+islands.length)%islands.length;const d=islands[selected];categoryEl.textContent=d.category;titleEl.textContent=d.name;descriptionEl.textContent=d.text;
+    metricsEl.replaceChildren(...d.metrics.map(([value,label])=>{const box=document.createElement('div');box.className='metric';const strong=document.createElement('strong');strong.textContent=value;const span=document.createElement('span');span.textContent=label;box.append(strong,span);return box}));
+    chartTitleEl.textContent=d.chartTitle; chartEl.setAttribute('aria-label',d.chartTitle+' chart'); chartEl.replaceChildren(...d.values.map((v,i)=>{const bar=document.createElement('span');bar.style.height=(v/Math.max(...d.values)*100)+'%';bar.dataset.year=d.years[i];bar.setAttribute('aria-label',`${d.years[i]}: ${v}`);return bar})); sourceEl.textContent=d.source;card.classList.add('visible');card.setAttribute('aria-hidden','false');
+    [...nav.children].forEach((b,i)=>b.setAttribute('aria-pressed',String(i===selected)));announce.textContent=`${d.name} island selected. ${d.text}`;
+  }
+  function closeDetails(){card.classList.remove('visible');card.setAttribute('aria-hidden','true');selected=-1;[...nav.children].forEach(b=>b.setAttribute('aria-pressed','false'));announce.textContent='Island details closed.'}
+  islands.forEach((d,i)=>{const b=document.createElement('button');b.type='button';b.textContent=`${i+1} · ${d.name}`;b.setAttribute('aria-pressed','false');b.addEventListener('click',()=>selectIsland(i));nav.append(b)});
+  document.querySelector('#closeCard').addEventListener('click',closeDetails);
+  const resize=()=>{const r=frame.getBoundingClientRect();renderer.setSize(r.width,r.height,false);camera.aspect=r.width/r.height;camera.updateProjectionMatrix()};new ResizeObserver(resize).observe(frame);resize();
+  let dragging=false,lastX=0,lastY=0,targetRotation=0,targetTilt=.14;
+  canvas.addEventListener('pointerdown',e=>{dragging=true;lastX=e.clientX;lastY=e.clientY;canvas.setPointerCapture(e.pointerId)});
+  canvas.addEventListener('pointermove',e=>{if(!dragging)return;targetRotation+=(e.clientX-lastX)*.006;targetTilt=THREE.MathUtils.clamp(targetTilt+(e.clientY-lastY)*.002,-.1,.55);lastX=e.clientX;lastY=e.clientY});
+  canvas.addEventListener('pointerup',()=>dragging=false);canvas.addEventListener('pointercancel',()=>dragging=false);
+  let downX=0,downY=0;canvas.addEventListener('pointerdown',e=>{downX=e.clientX;downY=e.clientY});
+  const zoom=amount=>camera.position.z=THREE.MathUtils.clamp(camera.position.z+amount,11,23);
+  canvas.addEventListener('wheel',e=>{e.preventDefault();zoom(e.deltaY*.008)},{passive:false});
+  canvas.addEventListener('click',e=>{if(Math.hypot(e.clientX-downX,e.clientY-downY)>8)return;const r=canvas.getBoundingClientRect(),p=new THREE.Vector2(((e.clientX-r.left)/r.width)*2-1,-((e.clientY-r.top)/r.height)*2+1);const ray=new THREE.Raycaster();ray.setFromCamera(p,camera);const hit=ray.intersectObjects(clickable)[0];if(hit)selectIsland(hitToIsland.get(hit.object))});
+  const rotate=amount=>targetRotation+=amount;
+  document.querySelector('#rotateLeft').addEventListener('click',()=>rotate(-.45));document.querySelector('#rotateRight').addEventListener('click',()=>rotate(.45));document.querySelector('#zoomIn').addEventListener('click',()=>zoom(-1));document.querySelector('#zoomOut').addEventListener('click',()=>zoom(1));
+  window.addEventListener('keydown',e=>{if(e.altKey||e.ctrlKey||e.metaKey)return;const tag=document.activeElement?.tagName;if(['INPUT','TEXTAREA','SELECT'].includes(tag))return;
+    if(e.key==='ArrowLeft'){e.preventDefault();rotate(-.16)}else if(e.key==='ArrowRight'){e.preventDefault();rotate(.16)}else if(e.key==='+'||e.key==='='){e.preventDefault();zoom(-1)}else if(e.key==='-'){e.preventDefault();zoom(1)}else if(e.key==='Escape'){closeDetails()}else if(/^[1-5]$/.test(e.key)){selectIsland(Number(e.key)-1)}
+  });
+  camera.lookAt(0,1.3,0);function animate(){requestAnimationFrame(animate);world.rotation.y+=(targetRotation-world.rotation.y)*.08;world.rotation.x+=(targetTilt-world.rotation.x)*.08;renderer.render(scene,camera)}animate();
+</script>
+</body>
+</html>
